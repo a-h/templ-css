@@ -1,0 +1,7 @@
+{% package main %}
+
+{% templ Component(name string) %}
+	<div class={%= string(componentClass) %}>
+		{%= "content" %}
+	</div>
+{% endtempl %}
