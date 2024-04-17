@@ -1,7 +1,6 @@
 package css
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -20,11 +19,11 @@ func TestParse(t *testing.T) {
 			input:  `font-color: red;`,
 			inline: true,
 			expected: []Token{
-				NewToken(0, css.IdentToken, "font-color", false),
-				NewToken(10, css.ColonToken, ":", false),
-				NewToken(11, css.WhitespaceToken, " ", false),
-				NewToken(12, css.IdentToken, "red", false),
-				NewToken(15, css.SemicolonToken, ";", false),
+				NewCSSToken(0, css.IdentToken, "font-color"),
+				NewCSSToken(10, css.ColonToken, ":"),
+				NewCSSToken(11, css.WhitespaceToken, " "),
+				NewCSSToken(12, css.IdentToken, "red"),
+				NewCSSToken(15, css.SemicolonToken, ";"),
 			},
 		},
 		{
@@ -32,11 +31,11 @@ func TestParse(t *testing.T) {
 			input:  `font-color: {{ red }};`,
 			inline: true,
 			expected: []Token{
-				NewToken(0, css.IdentToken, "font-color", false),
-				NewToken(10, css.ColonToken, ":", false),
-				NewToken(11, css.WhitespaceToken, " ", false),
-				NewToken(12, css.IdentToken, "{{ red }}", true),
-				NewToken(21, css.SemicolonToken, ";", false),
+				NewCSSToken(0, css.IdentToken, "font-color"),
+				NewCSSToken(10, css.ColonToken, ":"),
+				NewCSSToken(11, css.WhitespaceToken, " "),
+				NewGoToken(12, "{{ ", "red", " }}"),
+				NewCSSToken(21, css.SemicolonToken, ";"),
 			},
 		},
 		{
@@ -46,19 +45,40 @@ func TestParse(t *testing.T) {
 }`,
 			inline: false,
 			expected: []Token{
-				NewToken(0, css.IdentToken, "a", false),
-				NewToken(1, css.ColonToken, ":", false),
-				NewToken(2, css.IdentToken, "hover", false),
-				NewToken(7, css.WhitespaceToken, " ", false),
-				NewToken(8, css.LeftBraceToken, "{", false),
-				NewToken(9, css.WhitespaceToken, "\n  ", false),
-				NewToken(11, css.IdentToken, "background-color", false),
-				NewToken(26, css.ColonToken, ":", false),
-				NewToken(27, css.WhitespaceToken, " ", false),
-				NewToken(28, css.IdentToken, "yellow", false),
-				NewToken(34, css.SemicolonToken, ";", false),
-				NewToken(35, css.WhitespaceToken, "\n", false),
-				NewToken(36, css.RightBraceToken, "}", false),
+				NewCSSToken(0, css.IdentToken, "a"),
+				NewCSSToken(1, css.ColonToken, ":"),
+				NewCSSToken(2, css.IdentToken, "hover"),
+				NewCSSToken(7, css.WhitespaceToken, " "),
+				NewCSSToken(8, css.LeftBraceToken, "{"),
+				NewCSSToken(9, css.WhitespaceToken, "\n  "),
+				NewCSSToken(12, css.IdentToken, "background-color"),
+				NewCSSToken(28, css.ColonToken, ":"),
+				NewCSSToken(29, css.WhitespaceToken, " "),
+				NewCSSToken(30, css.IdentToken, "yellow"),
+				NewCSSToken(36, css.SemicolonToken, ";"),
+				NewCSSToken(37, css.WhitespaceToken, "\n"),
+				NewCSSToken(38, css.RightBraceToken, "}"),
+			},
+		},
+		{
+			name:   "media query",
+			input:  `@media print {.class{width:5px;}}`,
+			inline: false,
+			expected: []Token{
+				NewCSSToken(0, css.AtKeywordToken, "@media"),
+				NewCSSToken(6, css.WhitespaceToken, " "),
+				NewCSSToken(7, css.IdentToken, "print"),
+				NewCSSToken(12, css.WhitespaceToken, " "),
+				NewCSSToken(13, css.LeftBraceToken, "{"),
+				NewCSSToken(14, css.DelimToken, "."),
+				NewCSSToken(15, css.IdentToken, "class"),
+				NewCSSToken(20, css.LeftBraceToken, "{"),
+				NewCSSToken(21, css.IdentToken, "width"),
+				NewCSSToken(26, css.ColonToken, ":"),
+				NewCSSToken(27, css.DimensionToken, "5px"),
+				NewCSSToken(30, css.SemicolonToken, ";"),
+				NewCSSToken(31, css.RightBraceToken, "}"),
+				NewCSSToken(32, css.RightBraceToken, "}"),
 			},
 		},
 	}
@@ -74,9 +94,9 @@ func TestParse(t *testing.T) {
 				t.Error(test.input)
 				t.Error(actual)
 				t.Error(diff)
+				t.Error(test.input)
+				t.Error(PrintTokens(actual))
 			}
-
-			fmt.Println(PrintTokens(actual))
 		})
 	}
 }

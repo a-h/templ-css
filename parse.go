@@ -4,26 +4,65 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/a-h/templ/parser/v2/goexpression"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/css"
 )
 
-func NewToken(pos int, tt css.TokenType, content string, isGo bool) Token {
-	return Token{
-		Pos:       pos,
+func NewCSSToken(pos int, tt css.TokenType, content string) Token {
+	return CSSToken{
+		Position:  pos,
 		TokenType: tt,
 		Content:   content,
-		Go:        isGo,
 	}
 }
 
-type Token struct {
-	Pos       int
+type Token interface {
+	Pos() int
+	String() string
+}
+
+var _ Token = CSSToken{}
+var _ Token = GoToken{}
+
+type CSSToken struct {
+	Position  int
 	TokenType css.TokenType
 	Content   string
-	Go        bool
+}
+
+func (t CSSToken) Pos() int {
+	return t.Position
+}
+
+func (t CSSToken) String() string {
+	return t.Content
+}
+
+func NewGoToken(pos int, prefix, expr, suffix string) Token {
+	return GoToken{
+		Position: pos,
+		Prefix:   prefix,
+		Expr:     expr,
+		Suffix:   suffix,
+	}
+}
+
+type GoToken struct {
+	Position int
+	Prefix   string
+	Expr     string
+	Suffix   string
+}
+
+func (t GoToken) Pos() int {
+	return t.Position
+}
+
+func (t GoToken) String() string {
+	return t.Prefix + t.Expr + t.Suffix
 }
 
 func peek(input string, pos int) (r rune) {
@@ -39,91 +78,143 @@ func isWhitespace(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
 }
 
+func readWhitespace(input string, pos int) string {
+	var sb strings.Builder
+	for wsPos := pos; wsPos < len(input); wsPos++ {
+		peeked := peek(input, wsPos)
+		if !isWhitespace(peeked) {
+			break
+		}
+		sb.WriteRune(peeked)
+	}
+	return sb.String()
+}
+
+func isEmptyWhitespace(tt css.TokenType, data []byte) bool {
+	return tt == css.WhitespaceToken && len(data) == 0
+}
+
 func Parse(input string, inline bool) (tokens []Token, err error) {
 	pi := parse.NewInput(bytes.NewBufferString(input))
+
 	p := css.NewParser(pi, inline)
+	pos := p.Offset()
+loop:
 	for {
-		pos := p.Offset()
 		gt, tt, data := p.Next()
 		if gt == css.ErrorGrammar {
 			if p.Err() == io.EOF {
-				return tokens, nil
+				break loop
 			}
 			return nil, fmt.Errorf("failed to parse CSS: %w", p.Err())
 		}
 
-		// Skip tokens that can't contain Go expressions.
-		if !(gt == css.AtRuleGrammar || gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar || gt == css.DeclarationGrammar) {
-			tokens = append(tokens, NewToken(pos, tt, string(data), false))
-			continue
-		}
-
-		// Handle at-rules and declarations.
-		tokens = append(tokens, NewToken(pos, tt, string(data), false))
-		pos += len(string(data))
-		if gt == css.DeclarationGrammar {
-			// Add a colon.
-			tokens = append(tokens, NewToken(pos, css.ColonToken, ":", false))
-			pos += len(":")
-			// Collect whitespace.
-			for wsPos := pos; wsPos < len(input); wsPos++ {
-				peeked := peek(input, wsPos)
-				if !isWhitespace(peeked) {
-					break
+		if gt == css.AtRuleGrammar || gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar || gt == css.DeclarationGrammar {
+			if !isEmptyWhitespace(tt, data) {
+				tokens = append(tokens, NewCSSToken(pos, tt, string(data)))
+				pos += len(data)
+			}
+			if gt == css.DeclarationGrammar {
+				tokens = append(tokens, NewCSSToken(pos, css.ColonToken, string(":")))
+				pos++
+			}
+			var ws string
+			if ws = readWhitespace(input, pos); ws != "" {
+				tokens = append(tokens, NewCSSToken(pos, css.WhitespaceToken, ws))
+				pos += len(ws)
+			}
+			// Read values.
+			skipValueToIndex := -1
+			for i, val := range p.Values() {
+				if skipValueToIndex > -1 && i < skipValueToIndex {
+					continue
 				}
-				tokens = append(tokens, NewToken(pos, css.WhitespaceToken, string(peeked), false))
-				pos += len(string(peeked))
-			}
-		}
-
-		// Handle values.
-		skipUntil := -1
-	values:
-		for _, val := range p.Values() {
-			if skipUntil > -1 && pos < skipUntil {
-				pos += len(string(val.Data))
-				continue values
-			}
-			skipUntil = -1
-
-			next := peek(input, pos+1)
-			if val.TokenType == css.LeftBraceToken && next == lbrace {
-				// We've got a Go expression.
-				// Skip the next character, which is the opening brace, then read a Go expression until we hit the closing brace.
-				_, end, err := goexpression.Expression(input[pos+1:])
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse Go expression: %w", err)
+				if i == 0 && val.TokenType == css.WhitespaceToken && ws != "" {
+					// Skip leading whitespace, it's already added.
+					continue
 				}
-				expr := input[pos : pos+end+2]
-				tokens = append(tokens, NewToken(pos, css.IdentToken, expr, true))
-				// Skip the closing brace.
-				skipUntil = pos + 1 + len(expr)
-				pos += len(string(val.Data))
-				continue values
+				if goToken, isGoToken := getGoToken(input, pos); isGoToken {
+					startPos := pos
+					tokens = append(tokens, goToken)
+					pos += len(goToken.String())
+					// Work out how many upcoming values to skip.
+					var j int
+					for j = i + 1; j < len(p.Values()); j++ {
+						startPos += len(p.Values()[j].Data)
+						if startPos >= pos {
+							break
+						}
+					}
+					skipValueToIndex = j
+					continue
+				}
+				tokens = append(tokens, NewCSSToken(pos, val.TokenType, string(val.Data)))
+				pos += len(val.Data)
 			}
-			tokens = append(tokens, NewToken(pos, tt, string(val.Data), false))
-			pos += len(string(val.Data))
-			continue values
-		}
-
-		if gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar {
-			tokens = append(tokens, NewToken(pos, css.LeftBraceToken, string(lbrace), false))
-			pos += len(string(lbrace))
-			continue
-		}
-		// Add a semicolon to the end of the declaration.
-		if gt == css.AtRuleGrammar || gt == css.DeclarationGrammar {
-			tokens = append(tokens, NewToken(pos, css.SemicolonToken, ";", false))
-			pos += len(";")
-			continue
+			// Read whitespace between values and semicolon.
+			if ws := readWhitespace(input, pos); ws != "" {
+				tokens = append(tokens, NewCSSToken(pos, css.WhitespaceToken, ws))
+				pos += len(ws)
+			}
+			// Add braces / semicolon.
+			if gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar {
+				tokens = append(tokens, NewCSSToken(pos, css.LeftBraceToken, "{"))
+				pos++
+			} else if gt == css.AtRuleGrammar || gt == css.DeclarationGrammar {
+				tokens = append(tokens, NewCSSToken(pos, css.SemicolonToken, ";"))
+				pos++
+			} else if gt == css.EndAtRuleGrammar || gt == css.EndRulesetGrammar {
+				tokens = append(tokens, NewCSSToken(pos, css.RightBraceToken, "}"))
+				pos++
+			}
+			// Read whitespace after braces / semicolon.
+			if ws := readWhitespace(input, pos); ws != "" {
+				tokens = append(tokens, NewCSSToken(pos, css.WhitespaceToken, ws))
+				pos += len(ws)
+			}
+		} else {
+			ws := readWhitespace(input, pos)
+			if ws != "" {
+				tokens = append(tokens, NewCSSToken(pos, css.WhitespaceToken, ws))
+				pos += len(ws)
+			}
+			tokens = append(tokens, NewCSSToken(pos, tt, string(data)))
+			pos += len(data)
 		}
 	}
+
+	return tokens, nil
+}
+
+func getGoToken(input string, pos int) (expr GoToken, isGo bool) {
+	expr.Position = pos
+	if peek(input, pos) != lbrace {
+		return
+	}
+	if peek(input, pos+1) != lbrace {
+		return
+	}
+	// Read prefix.
+	expr.Prefix = "{{" + readWhitespace(input, pos+2)
+	pos += len(expr.Prefix)
+	// Read expression.
+	start, end, err := goexpression.Expression(input[pos:])
+	if err != nil {
+		return expr, false
+	}
+	expr.Expr = input[pos+start : pos+end]
+	pos += end
+	// Read suffix.
+	expr.Suffix = readWhitespace(input, pos) + "}}"
+	pos += len(expr.Suffix)
+	// Return.
+	return expr, true
 }
 
 func PrintTokens(tokens []Token) string {
 	var b bytes.Buffer
 	for _, t := range tokens {
-		b.WriteString(t.Content)
+		b.WriteString(t.String())
 	}
 	return b.String()
 }
