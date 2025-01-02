@@ -1,0 +1,14 @@
+$user-bg: url('/images/default-bg.jpg'); // Default background image
+
+body {
+  background-image: $user-bg;
+  background-size: cover;
+  background-position: center;
+}
+
+.heading {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #333;
+}
+
