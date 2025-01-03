@@ -2,6 +2,7 @@ package templcss
 
 import (
 	"context"
+	"html"
 	"io"
 
 	"github.com/a-h/templ"
@@ -9,36 +10,37 @@ import (
 )
 
 type prop struct {
-	Key   string
-	Value string
+	Property string `json:"property"`
+	Value    string `json:"value"`
 }
 
-func Var(name, value string) prop {
-	k, v := safehtml.SanitizeCSS(name, value)
+func New(property, value string) prop {
+	p, v := safehtml.SanitizeCSS(property, value)
 	return prop{
-		Key:   k,
-		Value: v,
+		Property: p,
+		Value:    v,
 	}
 }
 
-func UnsanitizedVar(name, value string) prop {
+func Unsanitized(property, value string) prop {
 	return prop{
-		Key:   name,
-		Value: value,
+		Property: property,
+		Value:    value,
 	}
 }
 
-func Variables(properties ...prop) templ.Component {
+func Set(properties ...prop) templ.Component {
 	jsonString, err := templ.JSONString(properties)
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		if err != nil {
 			return err
 		}
 		io.WriteString(w, "<script type=\"text/javascript\" data-variables=\"")
-		io.WriteString(w, jsonString)
+		io.WriteString(w, html.EscapeString(jsonString))
 		io.WriteString(w, "\">\n")
 		io.WriteString(w, "const props = JSON.parse(document.currentScript.getAttribute(\"data-variables\"));\n")
-		io.WriteString(w, "props.forEach(p => document.documentElement.style.setProperty(p.name, p.value));\n")
+		io.WriteString(w, "const r = document.querySelector(\":root\");\n")
+		io.WriteString(w, "props.forEach(p => { r.style.setProperty(p.property, p.value); alert(JSON.stringify(p)) });\n")
 		io.WriteString(w, "</script>\n")
 		return nil
 	})

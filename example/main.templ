@@ -1,0 +1,38 @@
+package main
+
+import (
+	// Aliased for now, but cssprops is probably the name to go with.
+
+	cssprops "github.com/a-h/templ-css"
+	"github.com/a-h/templ-css/example/css"
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		backgroundColor := r.URL.Query().Get("color")
+		if backgroundColor == "" {
+			backgroundColor = "#00ff00"
+		}
+		templ.Handler(Page(backgroundColor)).ServeHTTP(w, r)
+	})
+	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir("./css"))))
+	http.ListenAndServe(":8080", nil)
+}
+
+templ Page(backgroundColor string) {
+	<!DOCTYPE html>
+	<html>
+		<head>
+			<title>Page</title>
+			<link rel="stylesheet" href="/css/styles.css"/>
+		</head>
+		<body>
+			@cssprops.Set(cssprops.New("--bgcolor", backgroundColor))
+			<!-- Note how we're able to use auto-completion for the CSS class name. -->
+			<div class={ css.WithBackgroundColor() }>
+				Contents
+			</div>
+		</body>
+	</html>
+}

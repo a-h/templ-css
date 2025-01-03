@@ -1,0 +1,3 @@
+.withBackgroundColor {
+  background-color: var(--bgcolor, #eee);
+}
