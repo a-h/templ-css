@@ -9,4 +9,13 @@ require (
 	github.com/tdewolff/parse/v2 v2.7.12
 )
 
-require github.com/alecthomas/kong v1.6.0
+require (
+	github.com/alecthomas/kong v1.6.0
+	github.com/bep/godartsass/v2 v2.3.2
+	golang.org/x/text v0.21.0
+)
+
+require (
+	github.com/cli/safeexec v1.0.1 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
+)

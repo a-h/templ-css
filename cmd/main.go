@@ -3,14 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/kong"
+	"github.com/bep/godartsass/v2"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/css"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type CLI struct {
@@ -23,16 +29,31 @@ type GenerateCommand struct {
 }
 
 func (c GenerateCommand) Run(ctx context.Context) (err error) {
-	//TODO: If the file is scss, convert it to css first using https://github.com/bep/godartsass
+	var r io.ReadCloser
 
-	// Open the file.
-	f, err := os.Open(c.FileName)
-	if err != nil {
-		return fmt.Errorf("could not open file: %w", err)
+	extension := filepath.Ext(c.FileName)
+	switch extension {
+	case ".scss":
+		src, err := os.ReadFile(c.FileName)
+		if err != nil {
+			return fmt.Errorf("could not read file: %w", err)
+		}
+		css, err := convertScssToCss(string(src))
+		if err != nil {
+			return fmt.Errorf("could not convert scss to css: %w", err)
+		}
+		r = io.NopCloser(strings.NewReader(css))
+	case ".css":
+		r, err = os.Open(c.FileName)
+		if err != nil {
+			return fmt.Errorf("could not open file: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported file type: %s", extension)
 	}
-	defer f.Close()
+	defer r.Close()
 
-	lexer := css.NewLexer(parse.NewInput(f))
+	lexer := css.NewLexer(parse.NewInput(r))
 	classes := make(map[string]bool)
 	var insideSelector bool
 
@@ -72,6 +93,21 @@ func (c GenerateCommand) Run(ctx context.Context) (err error) {
 	return nil
 }
 
+var getSassTranspilerOnce func() (*godartsass.Transpiler, error) = sync.OnceValues(func() (*godartsass.Transpiler, error) {
+	return godartsass.Start(godartsass.Options{})
+})
+
+func convertScssToCss(src string) (css string, err error) {
+	tp, err := getSassTranspilerOnce()
+	if err != nil {
+		return "", err
+	}
+	result, err := tp.Execute(godartsass.Args{
+		Source: src,
+	})
+	return result.CSS, err
+}
+
 func writeGoCode(pkg string, classes []string) string {
 	var sb strings.Builder
 	sb.WriteString("package ")
@@ -88,6 +124,8 @@ func writeGoCode(pkg string, classes []string) string {
 	}
 	return sb.String()
 }
+
+var titleCaser = cases.Title(language.AmericanEnglish)
 
 func convertToGoName(s string) string {
 	// A Go identifier must begin with a letter (a-z or A-Z) or an underscore (_) and can be followed by any combination of letters, digits (0-9), and underscores.
@@ -111,7 +149,7 @@ func convertToGoName(s string) string {
 	if s[0] >= '0' && s[0] <= '9' {
 		s = "_" + s
 	}
-	return strings.Title(s)
+	return titleCaser.String(s)
 }
 
 func main() {
