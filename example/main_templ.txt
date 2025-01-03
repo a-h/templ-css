@@ -1,3 +1,0 @@
-<!doctype html><html><head><title>Page</title><link rel=\"stylesheet\" href=\"/css/styles.css\"></head><body>
-<div class=\"
-\">Contents</div></body></html>

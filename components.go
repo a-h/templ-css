@@ -2,7 +2,6 @@ package templcss
 
 import (
 	"context"
-	"html"
 	"io"
 
 	"github.com/a-h/templ"
@@ -35,13 +34,16 @@ func Set(properties ...prop) templ.Component {
 		if err != nil {
 			return err
 		}
-		io.WriteString(w, "<script type=\"text/javascript\" data-variables=\"")
-		io.WriteString(w, html.EscapeString(jsonString))
-		io.WriteString(w, "\">\n")
-		io.WriteString(w, "const props = JSON.parse(document.currentScript.getAttribute(\"data-variables\"));\n")
-		io.WriteString(w, "const r = document.querySelector(\":root\");\n")
-		io.WriteString(w, "props.forEach(p => { r.style.setProperty(p.property, p.value); alert(JSON.stringify(p)) });\n")
-		io.WriteString(w, "</script>\n")
-		return nil
+
+		script := `<script type="text/javascript">
+			(() => {
+				const r = document.querySelector(":root");
+				const props = ` + jsonString + `;
+				props.forEach(({ property, value }) => r.style.setProperty(property, value));
+			})();
+		</script>`
+
+		_, err = io.WriteString(w, script)
+		return err
 	})
 }
