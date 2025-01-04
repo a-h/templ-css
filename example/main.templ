@@ -30,7 +30,7 @@ templ Page(backgroundColor string) {
 		<body>
 			@cssprops.Set(cssprops.New("--bgcolor", backgroundColor))
 			<!-- Note how we're able to use auto-completion for the CSS class name. -->
-			<div class={ css.WithBackgroundColor() }>
+			<div class={ css.WithBackgroundColor }>
 				Contents
 			</div>
 		</body>

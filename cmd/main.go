@@ -10,13 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/alecthomas/kong"
 	"github.com/bep/godartsass/v2"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/css"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 type CLI struct {
@@ -110,22 +109,21 @@ func convertScssToCss(src string) (css string, err error) {
 
 func writeGoCode(pkg string, classes []string) string {
 	var sb strings.Builder
+
 	sb.WriteString("package ")
 	sb.WriteString(pkg)
 	sb.WriteString("\n\n")
+
 	for _, class := range classes {
-		sb.WriteString("func ")
+		sb.WriteString("const ")
 		sb.WriteString(convertToGoName(class))
-		sb.WriteString("() string {\n")
-		sb.WriteString("\treturn ")
+		sb.WriteString(" = ")
 		sb.WriteString(strconv.Quote(class))
-		sb.WriteString("\n")
-		sb.WriteString("}\n\n")
+		sb.WriteByte('\n')
 	}
+
 	return sb.String()
 }
-
-var titleCaser = cases.Title(language.AmericanEnglish)
 
 func convertToGoName(s string) string {
 	// A Go identifier must begin with a letter (a-z or A-Z) or an underscore (_) and can be followed by any combination of letters, digits (0-9), and underscores.
@@ -149,7 +147,19 @@ func convertToGoName(s string) string {
 	if s[0] >= '0' && s[0] <= '9' {
 		s = "_" + s
 	}
-	return titleCaser.String(s)
+
+	return uppercaseFirstLetter(s)
+}
+
+func uppercaseFirstLetter(s string) string {
+	runes := []rune(s)
+	for i, r := range runes {
+		if unicode.IsLetter(r) {
+			runes[i] = unicode.ToUpper(r)
+			break
+		}
+	}
+	return string(runes)
 }
 
 func main() {

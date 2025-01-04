@@ -12,7 +12,6 @@ require (
 require (
 	github.com/alecthomas/kong v1.6.0
 	github.com/bep/godartsass/v2 v2.3.2
-	golang.org/x/text v0.21.0
 )
 
 require (
