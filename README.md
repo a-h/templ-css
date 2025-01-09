@@ -15,3 +15,11 @@ interactive: true
 ```bash
 go run ./cmd/. generate --file-name="styles.css" --package="styles"
 ```
+
+### generate-module
+
+interactive: true
+
+```bash
+go run ./cmd/. generate --file-name="components.module.css" --package="styles"
+```

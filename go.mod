@@ -12,6 +12,8 @@ require (
 require (
 	github.com/alecthomas/kong v1.6.0
 	github.com/bep/godartsass/v2 v2.3.2
+	golang.org/x/mod v0.20.0
+	golang.org/x/sync v0.10.0
 )
 
 require (
